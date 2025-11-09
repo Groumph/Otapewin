@@ -91,17 +91,30 @@ The release workflow requires:
   - macOS ARM64 (Apple Silicon)
 
 **Build Configuration**:
+
+The workflow uses platform-specific syntax:
+
+*Windows (PowerShell)*:
+```powershell
+dotnet publish src/Otapewin/Otapewin.csproj `
+  --configuration Release `
+  --runtime {platform-rid} `
+  --self-contained true `
+  /p:PublishSingleFile=true `
+  /p:PublishTrimmed=true
+```
+
+*Linux/macOS (Bash)*:
 ```bash
-dotnet publish \
+dotnet publish src/Otapewin/Otapewin.csproj \
   --configuration Release \
   --runtime {platform-rid} \
   --self-contained true \
   /p:PublishSingleFile=true \
-  /p:PublishTrimmed=true \
-  /p:EnableCompressionInSingleFile=true \
-  /p:DebugType=none \
-  /p:DebugSymbols=false
+  /p:PublishTrimmed=true
 ```
+
+> **Note**: PowerShell uses backticks (`) for line continuation, while Bash uses backslashes (\). The workflow handles both automatically.
 
 **Optimizations Applied**:
 - ✅ Single-file executable
@@ -216,16 +229,20 @@ dotnet format --verify-no-changes
 
 ### Test Release Build Locally
 
-```bash
+**Windows (PowerShell)**:
+```powershell
 # Windows x64
-dotnet publish src/Otapewin/Otapewin.csproj \
-  --configuration Release \
-  --runtime win-x64 \
-  --self-contained true \
-  --output ./publish/win-x64 \
-  /p:PublishSingleFile=true \
+dotnet publish src/Otapewin/Otapewin.csproj `
+  --configuration Release `
+  --runtime win-x64 `
+  --self-contained true `
+  --output ./publish/win-x64 `
+  /p:PublishSingleFile=true `
   /p:PublishTrimmed=true
+```
 
+**Linux/macOS (Bash)**:
+```bash
 # Linux x64
 dotnet publish src/Otapewin/Otapewin.csproj \
   --configuration Release \
@@ -271,6 +288,14 @@ dotnet publish src/Otapewin/Otapewin.csproj \
 
 ### Release Failures
 
+**PowerShell Syntax Error (Windows builds)**:
+```
+ParserError: Missing expression after unary operator '--'
+```
+- This occurs when using Bash syntax (`\` line continuation) in PowerShell
+- The workflow now uses separate steps for Windows (PowerShell with `` ` ``) and Unix (Bash with `\`)
+- Verify the publish step uses `if: runner.os == 'Windows'` condition
+
 **Tag Already Exists**:
 ```bash
 # Delete local tag
@@ -304,6 +329,7 @@ git push origin v1.0.0
 6. **Add custom release notes for major versions**
 7. **Use minimal required permissions in workflows**
 8. **Review workflow permissions regularly**
+9. **Use platform-appropriate syntax (PowerShell vs Bash)**
 
 ## Workflow Badges
 
@@ -334,3 +360,4 @@ Potential improvements to consider:
 - [GitHub Actions Permissions](https://docs.github.com/en/actions/security-guides/automatic-token-authentication)
 - [.NET CLI Documentation](https://docs.microsoft.com/en-us/dotnet/core/tools/)
 - [Semantic Versioning](https://semver.org/)
+- [PowerShell Line Continuation](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_line_editing)

@@ -99,7 +99,7 @@ jobs:
           - name: macOS ARM64
             os: macos-latest
             rid: osx-arm64
-            artifact: otapewin-osx-arm64.tar.gz
+            artifact: otapewin-osx-arm64.zip
 
     steps:
     - name: Checkout code
@@ -113,7 +113,24 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
 
-    - name: Publish
+    - name: Publish (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        dotnet publish src/Otapewin/Otapewin.csproj `
+          --configuration Release `
+          --runtime ${{ matrix.rid }} `
+          --self-contained true `
+          --output ./publish/${{ matrix.rid }} `
+          /p:PublishSingleFile=true `
+          /p:PublishTrimmed=true `
+          /p:EnableCompressionInSingleFile=true `
+          /p:DebugType=none `
+          /p:DebugSymbols=false `
+          /p:Version=${{ needs.create-release.outputs.version }}
+
+    - name: Publish (Unix)
+      if: runner.os != 'Windows'
       run: |
         dotnet publish src/Otapewin/Otapewin.csproj \
           --configuration Release \
