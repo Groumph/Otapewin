@@ -15,58 +15,8 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.version }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Get version from tag
-      id: get_version
-      run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Otapewin v${{ steps.get_version.outputs.version }}
-        draft: false
-        prerelease: false
-        body: |
-          ## Otapewin v${{ steps.get_version.outputs.version }}
-          
-          ### Downloads
-          
-          Choose the appropriate download for your platform:
-          
-          - **Windows (x64)**: `otapewin-win-x64.zip`
-          - **Windows (ARM64)**: `otapewin-win-arm64.zip`
-          - **Linux (x64)**: `otapewin-linux-x64.tar.gz`
-          - **Linux (ARM64)**: `otapewin-linux-arm64.tar.gz`
-          - **macOS (x64)**: `otapewin-osx-x64.tar.gz`
-          - **macOS (ARM64/Apple Silicon)**: `otapewin-osx-arm64.tar.gz`
-          
-          ### Installation
-          
-          1. Download the appropriate package for your platform
-          2. Extract the archive
-          3. Run `otapewin` (or `otapewin.exe` on Windows)
-          
-          ### What's Changed
-          
-          See the commit history for details.
-
-  build-release:
+  build-and-release:
     name: Build ${{ matrix.name }}
-    needs: create-release
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -99,7 +49,7 @@ jobs:
           - name: macOS ARM64
             os: macos-latest
             rid: osx-arm64
-            artifact: otapewin-osx-arm64.zip
+            artifact: otapewin-osx-arm64.tar.gz
 
     steps:
     - name: Checkout code
@@ -112,6 +62,11 @@ jobs:
 
     - name: Restore dependencies
       run: dotnet restore
+
+    - name: Get version from tag
+      id: get_version
+      shell: bash
+      run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
     - name: Publish (Windows)
       if: runner.os == 'Windows'
@@ -127,7 +82,7 @@ jobs:
           /p:EnableCompressionInSingleFile=true `
           /p:DebugType=none `
           /p:DebugSymbols=false `
-          /p:Version=${{ needs.create-release.outputs.version }}
+          /p:Version=${{ steps.get_version.outputs.version }}
 
     - name: Publish (Unix)
       if: runner.os != 'Windows'
@@ -142,7 +97,7 @@ jobs:
           /p:EnableCompressionInSingleFile=true \
           /p:DebugType=none \
           /p:DebugSymbols=false \
-          /p:Version=${{ needs.create-release.outputs.version }}
+          /p:Version=${{ steps.get_version.outputs.version }}
 
     - name: Create archive (Windows)
       if: runner.os == 'Windows'
@@ -157,19 +112,72 @@ jobs:
         cd publish/${{ matrix.rid }}
         tar -czf ../../${{ matrix.artifact }} *
 
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./${{ matrix.artifact }}
-        asset_name: ${{ matrix.artifact }}
-        asset_content_type: application/octet-stream
-
-    - name: Upload artifact for verification
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.rid }}
-        path: ./publish/${{ matrix.rid }}
+        path: ./${{ matrix.artifact }}
         retention-days: 7
+
+  create-release:
+    name: Create Release
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Get version from tag
+      id: get_version
+      run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+
+    - name: Display structure of downloaded files
+      run: ls -R ./artifacts
+
+    - name: Create Release with Assets
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VERSION: ${{ steps.get_version.outputs.version }}
+      run: |
+        # Create release notes
+        cat > release_notes.md << 'EOF'
+        ## Otapewin v${{ steps.get_version.outputs.version }}
+        
+        ### Downloads
+        
+        Choose the appropriate download for your platform:
+        
+        - **Windows (x64)**: `otapewin-win-x64.zip`
+        - **Windows (ARM64)**: `otapewin-win-arm64.zip`
+        - **Linux (x64)**: `otapewin-linux-x64.tar.gz`
+        - **Linux (ARM64)**: `otapewin-linux-arm64.tar.gz`
+        - **macOS (x64)**: `otapewin-osx-x64.tar.gz`
+        - **macOS (ARM64/Apple Silicon)**: `otapewin-osx-arm64.tar.gz`
+        
+        ### Installation
+        
+        1. Download the appropriate package for your platform
+        2. Extract the archive
+        3. Run `otapewin` (or `otapewin.exe` on Windows)
+        
+        ### What's Changed
+        
+        See the commit history for details.
+        EOF
+        
+        # Create release and upload all assets
+        gh release create "v${VERSION}" \
+          --title "Otapewin v${VERSION}" \
+          --notes-file release_notes.md \
+          ./artifacts/win-x64/otapewin-win-x64.zip \
+          ./artifacts/win-arm64/otapewin-win-arm64.zip \
+          ./artifacts/linux-x64/otapewin-linux-x64.tar.gz \
+          ./artifacts/linux-arm64/otapewin-linux-arm64.tar.gz \
+          ./artifacts/osx-x64/otapewin-osx-x64.tar.gz \
+          ./artifacts/osx-arm64/otapewin-osx-arm64.tar.gz
