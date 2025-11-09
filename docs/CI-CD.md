@@ -14,8 +14,17 @@ The project uses two main workflows:
 ### Triggers
 
 The CI workflow runs on:
-- Push to `master` or `main` branches
+- Push to `master`, `main`, or `develop` branches
 - Pull requests targeting these branches
+
+### Permissions
+
+The CI workflow requires these permissions:
+- `contents: read` - To checkout code
+- `checks: write` - To create check runs for test results
+- `pull-requests: write` - To comment on PRs with test results
+
+These are configured at the workflow level for security.
 
 ### Jobs
 
@@ -54,6 +63,11 @@ The release workflow runs when you push a tag that starts with `v`:
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+### Permissions
+
+The release workflow requires:
+- `contents: write` - To create releases and upload assets
 
 ### Jobs
 
@@ -142,12 +156,45 @@ Follow semantic versioning with a `v` prefix:
 - Patch releases: `v1.0.1`, `v1.0.2`
 - Pre-releases: `v1.0.0-alpha.1`, `v1.0.0-beta.2`, `v1.0.0-rc.1`
 
-## GitHub Secrets
+## GitHub Permissions and Tokens
 
-The workflows use these GitHub secrets (automatically available):
-- `GITHUB_TOKEN` - Automatically provided by GitHub Actions
+### GITHUB_TOKEN
 
-No additional secrets configuration is required!
+The workflows use `GITHUB_TOKEN`, which is automatically provided by GitHub Actions. This token:
+- ✅ Is automatically created for each workflow run
+- ✅ Expires when the workflow completes
+- ✅ Has permissions scoped to the repository
+- ✅ Requires explicit permission declarations in the workflow
+
+### Workflow Permissions
+
+Each workflow declares the minimum required permissions:
+
+**CI Workflow**:
+```yaml
+permissions:
+  contents: read        # Read code
+  checks: write         # Create check runs
+  pull-requests: write  # Comment on PRs
+```
+
+**Release Workflow**:
+```yaml
+permissions:
+  contents: write  # Create releases and upload assets
+```
+
+### Troubleshooting Permission Issues
+
+**Error: "Resource not accessible by integration"**
+- This means the workflow doesn't have required permissions
+- Check the `permissions:` section in the workflow file
+- Ensure repository settings allow GitHub Actions workflows
+
+**Error: "Bad credentials"**
+- GITHUB_TOKEN may be disabled in repository settings
+- Go to Settings → Actions → General
+- Ensure "Allow GitHub Actions to create and approve pull requests" is enabled (if needed)
 
 ## Local Testing
 
@@ -217,6 +264,11 @@ dotnet publish src/Otapewin/Otapewin.csproj \
 - Commit formatting changes
 - Push again
 
+**Permission Errors**:
+- Verify the `permissions:` section in the workflow
+- Check repository Actions settings
+- Ensure the workflow has necessary permissions
+
 ### Release Failures
 
 **Tag Already Exists**:
@@ -250,6 +302,8 @@ git push origin v1.0.0
 4. **Test downloaded binaries on target platforms**
 5. **Monitor workflow runs in the Actions tab**
 6. **Add custom release notes for major versions**
+7. **Use minimal required permissions in workflows**
+8. **Review workflow permissions regularly**
 
 ## Workflow Badges
 
@@ -277,5 +331,6 @@ Potential improvements to consider:
 ## Resources
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [GitHub Actions Permissions](https://docs.github.com/en/actions/security-guides/automatic-token-authentication)
 - [.NET CLI Documentation](https://docs.microsoft.com/en-us/dotnet/core/tools/)
 - [Semantic Versioning](https://semver.org/)
