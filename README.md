@@ -1,10 +1,11 @@
-# SecondBrain
+# Otapewin
 
-AI-powered CLI to organize your daily notes, weekly reviews, and backlog with modern .NET8 practices.
+AI-powered CLI to organize your daily notes, weekly reviews, and backlog with modern .NET 9 practices.
 
-[![CI](https://github.com/Groumph/SecondBrain/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Groumph/SecondBrain/actions/workflows/ci.yml)
+[![CI](https://github.com/Groumph/Otapewin/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Groumph/Otapewin/actions/workflows/ci.yml)
+[![Release](https://github.com/Groumph/Otapewin/actions/workflows/release.yml/badge.svg)](https://github.com/Groumph/Otapewin/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/8.0)
+[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/9.0)
 
 ## Features
 
@@ -18,22 +19,37 @@ AI-powered CLI to organize your daily notes, weekly reviews, and backlog with mo
 
 ## Getting Started
 
-### Prerequisites
-- .NET8 SDK
+### Download Pre-built Binaries
+
+Download the latest release for your platform from the [Releases page](https://github.com/Groumph/Otapewin/releases):
+
+- **Windows (x64)**: `otapewin-win-x64.zip`
+- **Windows (ARM64)**: `otapewin-win-arm64.zip`
+- **Linux (x64)**: `otapewin-linux-x64.tar.gz`
+- **Linux (ARM64)**: `otapewin-linux-arm64.tar.gz`
+- **macOS (x64)**: `otapewin-osx-x64.tar.gz`
+- **macOS (ARM64/Apple Silicon)**: `otapewin-osx-arm64.tar.gz`
+
+Extract the archive and run the executable.
+
+### Build from Source
+
+#### Prerequisites
+- .NET 9 SDK
 - OpenAI API key
 - Markdown vault (e.g., Obsidian)
 
-### Install
+#### Install
 1) Clone
 
-```
-git clone https://github.com/Groumph/SecondBrain.git
-cd SecondBrain
+```bash
+git clone https://github.com/Groumph/Otapewin.git
+cd Otapewin
 ```
 
 2) Build
 
-```
+```bash
 dotnet build -c Release
 ```
 
@@ -43,49 +59,52 @@ dotnet build -c Release
 
 Environment variables (Windows PowerShell):
 
-```
-$env:SECONDBRAIN_OpenAIKey = "sk-your-api-key"
-$env:SECONDBRAIN_VaultPath = "C:\path\to\vault"
+```powershell
+$env:OTAPEWIN_OpenAIKey = "sk-your-api-key"
+$env:OTAPEWIN_VaultPath = "C:\path\to\vault"
 $env:ASPNETCORE_ENVIRONMENT = "Production"
 ```
 
 Environment variables (bash):
 
-```
-export SECONDBRAIN_OpenAIKey="sk-your-api-key"
-export SECONDBRAIN_VaultPath="/path/to/vault"
+```bash
+export OTAPEWIN_OpenAIKey="sk-your-api-key"
+export OTAPEWIN_VaultPath="/path/to/vault"
 export ASPNETCORE_ENVIRONMENT=Production
 ```
 
 Optional file-based config:
-- Copy `src/SecondBrain/appsettings.example.json` to `src/SecondBrain/appsettings.json`
+- Copy `src/Otapewin/appsettings.example.json` to `src/Otapewin/appsettings.json`
 - Update values as needed
 - Note: `appsettings.json` is git-ignored. Do not commit secrets.
 
 Configuration precedence (highest wins):
 - Command line
-- Environment variables (prefix `SECONDBRAIN_`)
+- Environment variables (prefix `OTAPEWIN_`)
 - appsettings.{Environment}.json
 - appsettings.json (optional)
 
 ### Run
-```
+```bash
 # Daily processing
-SecondBrain.exe daily
+otapewin daily
 
 # Weekly review
-SecondBrain.exe weekly
+otapewin weekly
 
 # Backlog review
-SecondBrain.exe backlog
+otapewin backlog
+
+# Run all commands
+otapewin
 
 # Help
-SecondBrain.exe --help
-SecondBrain.exe daily --help
+otapewin --help
+otapewin daily --help
 ```
 
 ## Configuration
-See `src/SecondBrain/appsettings.example.json` for a complete example. Key settings:
+See `src/Otapewin/appsettings.example.json` for a complete example. Key settings:
 - `OpenAIKey` – your OpenAI API key
 - `VaultPath` – root path of your Markdown vault
 - `InputFile` – inbox file name (e.g., `Memory Inbox.md`)
@@ -102,20 +121,20 @@ See `src/SecondBrain/appsettings.example.json` for a complete example. Key setti
 - Clean workers for daily/weekly/backlog flows
 
 ```
-src/SecondBrain/
+src/Otapewin/
 ├── Clients/
-│ ├── IOpenAIClient.cs
-│ └── OpenAIClient.cs
+│   ├── IOpenAIClient.cs
+│   └── OpenAIClient.cs
 ├── Workers/
-│ ├── IWorker.cs
-│ ├── DailyWorker.cs
-│ ├── WeeklyWorker.cs
-│ └── BacklogReviewWorker.cs
+│   ├── IWorker.cs
+│   ├── DailyWorker.cs
+│   ├── WeeklyWorker.cs
+│   └── BacklogReviewWorker.cs
 ├── Helpers/
-│ ├── TagMatcher.cs
-│ └── ConsoleUi.cs
+│   ├── TagMatcher.cs
+│   └── ConsoleUi.cs
 ├── Extensions/
-│ └── StringExtensions.cs
+│   └── StringExtensions.cs
 ├── BrainConfig.cs
 └── Program.cs
 ```
@@ -123,28 +142,66 @@ src/SecondBrain/
 ## Testing
 
 Run tests:
-```
+```bash
 dotnet test
 ```
 
 With coverage (artifact written by test host):
-```
+```bash
 dotnet test --collect:"XPlat Code Coverage"
 ```
 
 Current status:
-- Tests:74/74 passing
+- Tests: 74/74 passing
 - Coverage: Cobertura XML emitted in `tests/**/TestResults/*/coverage.cobertura.xml`
 
 ## CI/CD
 
-- GitHub Actions CI: build, test, code coverage upload (`.github/workflows/ci.yml`)
-- GitHub Release workflow: publish artifacts on tags like `v1.0.0` (`.github/workflows/release.yml`)
+The project uses GitHub Actions for continuous integration and automated releases.
+
+### Continuous Integration
+
+Every push and pull request triggers the CI pipeline (`.github/workflows/ci.yml`):
+
+- ✅ **Build**: Compiles the project with .NET 9
+- ✅ **Test**: Runs all unit and integration tests
+- ✅ **Code Quality**: Checks formatting and builds with warnings as errors
+- 📊 **Test Reports**: Publishes test results automatically
+
+### Automated Releases
+
+To create a new release:
+
+1. **Update the version** in `src/Otapewin/Otapewin.csproj` if needed
+2. **Create and push a version tag**:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+3. **GitHub Actions will automatically**:
+   - Create a GitHub Release
+   - Build self-contained executables for:
+     - Windows (x64, ARM64)
+     - Linux (x64, ARM64)
+     - macOS (x64, ARM64)
+   - Upload all binaries to the release
+   - Generate release notes
+
+The release pipeline (`.github/workflows/release.yml`) creates optimized, self-contained single-file executables that are ready to run without requiring .NET installation.
+
+### Publishing Options
+
+The executables are built with:
+- ✅ Single-file deployment
+- ✅ Trimmed for smaller size
+- ✅ Self-contained (no .NET runtime required)
+- ✅ Compressed
 
 ## Security
 
 - Do not commit secrets. `appsettings.json` is git-ignored.
-- Prefer environment variables (`SECONDBRAIN_*`).
+- Prefer environment variables (`OTAPEWIN_*`).
 - See [SECURITY.md](SECURITY.md) for reporting and handling guidance.
 
 ## Documentation
@@ -165,4 +222,4 @@ Current status:
 - Cloud sync
 
 ## License
-MIT © SecondBrain Contributors
+MIT © Otapewin Contributors
