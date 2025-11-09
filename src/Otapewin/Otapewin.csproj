@@ -67,6 +67,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="OpenTelemetry.Api" Version="1.11.2" />
     <InternalsVisibleTo Include="Otapewin.Tests" />
   </ItemGroup>
 
