@@ -17,13 +17,33 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
     
-    <!-- .NET 9 Performance Optimizations -->
+    <!-- .NET 10 Performance Optimizations -->
     <IsAotCompatible>true</IsAotCompatible>
     <TieredCompilation>true</TieredCompilation>
     <TieredCompilationQuickJit>true</TieredCompilationQuickJit>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
     <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
+    
+    <!-- New .NET 10 performance features -->
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <EventSourceSupport>false</EventSourceSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    
+    <!-- Enable aggressive inlining and loop optimizations -->
+    <Optimize>true</Optimize>
+    <DebugType>embedded</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    
+    <!-- Enable Profile-Guided Optimization -->
+    <TieredPGO>true</TieredPGO>
+    <DynamicPGO>true</DynamicPGO>
+    
+    <!-- Enable ReadyToRun for faster startup -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <ReadyToRunUseCrossgen2>true</ReadyToRunUseCrossgen2>
 
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

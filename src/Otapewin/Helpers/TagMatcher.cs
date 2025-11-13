@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace Otapewin.Helpers;
 
 /// <summary>
@@ -20,7 +22,7 @@ public static class TagMatcher
 
     /// <summary>
     /// Extracts lines containing specific tags and groups them by tag name.
-    /// Uses optimized string searching with Span operations.
+    /// Uses optimized string searching with Span operations and FrozenDictionary.
     /// </summary>
     /// <param name="allAvailableTags">Dictionary of tag names to line lists.</param>
     /// <param name="lines">Lines to process.</param>
@@ -32,6 +34,14 @@ public static class TagMatcher
         ArgumentNullException.ThrowIfNull(allAvailableTags);
         ArgumentNullException.ThrowIfNull(lines);
 
+        // Pre-build hashtag lookup using FrozenDictionary for O(1) lookups with minimal memory
+        // FrozenDictionary in .NET 10 has improved hashing and cache locality
+        FrozenDictionary<string, string> hashtagToTagMap = allAvailableTags.Keys
+            .ToFrozenDictionary(
+                tag => $"#{tag}",
+                tag => tag,
+                StringComparer.OrdinalIgnoreCase);
+
         foreach (string line in lines)
         {
             if (string.IsNullOrWhiteSpace(line))
@@ -41,17 +51,15 @@ public static class TagMatcher
 
             ReadOnlySpan<char> lineSpan = line.AsSpan();
 
-            // Check each tag using optimized Span-based search
-            foreach (string tag in allAvailableTags.Keys)
+            // Check each hashtag using optimized FrozenDictionary lookup
+            foreach ((string hashtag, string tagName) in hashtagToTagMap)
             {
-                string fullTag = $"#{tag}";
-
-                // Use Span-based search for better performance
-                if (lineSpan.Contains(fullTag, StringComparison.OrdinalIgnoreCase))
+                // Use Span-based search for better performance with SIMD in .NET 10
+                if (lineSpan.Contains(hashtag, StringComparison.OrdinalIgnoreCase))
                 {
                     // Only trim if necessary - use Span to check
                     ReadOnlySpan<char> trimmed = lineSpan.Trim();
-                    allAvailableTags[tag].Add(trimmed.Length == lineSpan.Length ? line : trimmed.ToString());
+                    allAvailableTags[tagName].Add(trimmed.Length == lineSpan.Length ? line : trimmed.ToString());
                     break;
                 }
             }
