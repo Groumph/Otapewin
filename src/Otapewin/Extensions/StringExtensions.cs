@@ -1,15 +1,21 @@
+using System.Buffers;
+
 namespace Otapewin.Extensions;
 
+/// <summary>
+/// String extension methods for common operations
+/// </summary>
 public static class StringExtensions
 {
     private const string UserNamePlaceholder = "{userName}";
 
-    // Cache the span for repeated comparisons
-    private static ReadOnlySpan<char> PlaceholderSpan => "{userName}".AsSpan();
+    // Use SearchValues for optimized string searching (.NET 8+, enhanced in .NET 10)
+    private static readonly SearchValues<char> _placeholderSearchValues =
+        SearchValues.Create("{userName}");
 
     /// <summary>
     /// Replaces the {userName} placeholder with the specified name.
-    /// Optimized with Span operations to reduce allocations.
+    /// Optimized with SearchValues and Span operations to reduce allocations.
     /// </summary>
     /// <param name="input">The input string.</param>
     /// <param name="name">The name to replace with.</param>
@@ -21,13 +27,14 @@ public static class StringExtensions
             return input ?? string.Empty;
         }
 
-        // Fast path: check if placeholder exists using Span
-        if (!input.AsSpan().Contains(PlaceholderSpan, StringComparison.OrdinalIgnoreCase))
+        // Fast path: check if placeholder exists using SearchValues (optimized in .NET 10)
+        if (input.AsSpan().IndexOfAny(_placeholderSearchValues) < 0)
         {
             return input;
         }
 
-        // Use the built-in Replace which is highly optimized in .NET 9
+        // Use the built-in Replace which is highly optimized in .NET 10
+        // .NET 10 has significant improvements to String.Replace with vectorization
         return input.Replace(UserNamePlaceholder, name, StringComparison.OrdinalIgnoreCase);
     }
 }

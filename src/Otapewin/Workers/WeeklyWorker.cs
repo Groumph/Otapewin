@@ -1,14 +1,16 @@
-using System.Buffers;
-using System.Collections.Frozen;
-using System.Globalization;
-using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Otapewin.Clients;
 using Otapewin.Helpers;
+using System.Collections.Concurrent;
+using System.Globalization;
+using System.Text;
 
 namespace Otapewin.Workers;
 
+/// <summary>
+/// Weekly worker for generating weekly summaries
+/// </summary>
 public sealed class WeeklyWorker : IWorker
 {
     private readonly BrainConfig _config;
@@ -16,9 +18,9 @@ public sealed class WeeklyWorker : IWorker
     private readonly IOpenAIClient _openAIClient;
     private readonly ILogger<WeeklyWorker> _logger;
 
-    // Optimized search patterns
-    private static readonly SearchValues<char> TaskPendingChars = SearchValues.Create("- [ ]");
-
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WeeklyWorker"/> class
+    /// </summary>
     public WeeklyWorker(
         IOptions<BrainConfig> config,
         IOpenAIClient openAIClient,
@@ -35,45 +37,48 @@ public sealed class WeeklyWorker : IWorker
         _logger = logger;
         _vault = _config.VaultPath;
 
-        _logger.LogDebug("WeeklyWorker initialized with vault: {VaultPath}", _vault);
+        LogWorkerInitialized(_logger, _vault);
     }
 
+    /// <summary>
+    /// Process weekly summary generation
+    /// </summary>
     public async Task ProcessAsync(CancellationToken token)
     {
-        _logger.LogInformation("Starting weekly processing");
+        LogStartingWeeklyProcessing(_logger);
 
         if (DateTime.UtcNow.DayOfWeek != DayOfWeek.Monday)
         {
-            _logger.LogInformation("Not Monday, skipping weekly processing");
+            LogNotMonday(_logger);
             return;
         }
 
-        var now = DateTime.UtcNow;
-        var isoWeek = ISOWeek.GetWeekOfYear(now.Date) - 1;
-        var year = now.Year;
-        var archivePath = Path.Combine(_vault, _config.ArchivePath, year.ToString(), $"Week_{isoWeek}");
+        DateTime now = DateTime.UtcNow;
+        int isoWeek = ISOWeek.GetWeekOfYear(now.Date) - 1;
+        int year = now.Year;
+        string archivePath = Path.Combine(_vault, _config.ArchivePath, year.ToString(CultureInfo.InvariantCulture), $"Week_{isoWeek.ToString(CultureInfo.InvariantCulture)}");
 
         if (!Directory.Exists(archivePath))
         {
-            _logger.LogWarning("Archive directory not found: {ArchivePath}", archivePath);
+            LogArchiveDirectoryNotFound(_logger, archivePath);
             return;
         }
 
-        var files = Directory.GetFiles(archivePath, "*.md", SearchOption.TopDirectoryOnly);
-        _logger.LogInformation("Processing {FileCount} files from week {Week}", files.Length, isoWeek);
+        string[] files = Directory.GetFiles(archivePath, "*.md", SearchOption.TopDirectoryOnly);
+        LogProcessingFiles(_logger, files.Length, isoWeek);
 
         if (files.Length == 0)
         {
-            _logger.LogWarning("No markdown files found in {ArchivePath}", archivePath);
+            LogNoMarkdownFiles(_logger, archivePath);
             return;
         }
 
         // Read all files with optimized parallel processing
-        var estimatedLines = files.Length * 50;
-        var allLinesList = new List<string>(capacity: estimatedLines);
+        int estimatedLines = files.Length * 50;
+        List<string> allLinesList = new(capacity: estimatedLines);
 
         // Use Parallel.ForEachAsync for better concurrency control (.NET 6+, optimized in .NET 9)
-        var linesBag = new System.Collections.Concurrent.ConcurrentBag<string[]>();
+        ConcurrentBag<string[]> linesBag = [];
 
         await Parallel.ForEachAsync(
             files,
@@ -84,28 +89,28 @@ public sealed class WeeklyWorker : IWorker
             },
             async (file, ct) =>
             {
-                var fileLines = await File.ReadAllLinesAsync(file, ct).ConfigureAwait(false);
+                string[] fileLines = await File.ReadAllLinesAsync(file, ct).ConfigureAwait(false);
                 linesBag.Add(fileLines);
             }).ConfigureAwait(false);
 
         // Flatten results
-        foreach (var lines in linesBag)
+        foreach (string[] lines in linesBag)
         {
             allLinesList.AddRange(lines);
         }
 
         // Tag grouping with FrozenDictionary for better performance (.NET 8+)
-        var grouped = _config.Tags.ToDictionary(
+        Dictionary<string, List<string>> grouped = _config.Tags.ToDictionary(
             t => t.Name,
             _ => new List<string>(),
             StringComparer.OrdinalIgnoreCase);
 
-        TagMatcher.ExtractTaggedSections(grouped, allLinesList);
+        _ = TagMatcher.ExtractTaggedSections(grouped, allLinesList);
 
         // Build GPT summary per tag group - parallelize with better control
-        var tagSummaryBag = new System.Collections.Concurrent.ConcurrentBag<(string Tag, string Summary)>();
+        ConcurrentBag<(string Tag, string Summary)> tagSummaryBag = [];
 
-        var tagsToProcess = grouped.Where(kvp => kvp.Value.Count > 0).ToList();
+        List<KeyValuePair<string, List<string>>> tagsToProcess = [.. grouped.Where(kvp => kvp.Value.Count > 0)];
 
         await Parallel.ForEachAsync(
             tagsToProcess,
@@ -116,56 +121,56 @@ public sealed class WeeklyWorker : IWorker
             },
             async (kvp, ct) =>
             {
-                var (tag, lines) = kvp;
+                (string tag, List<string> lines) = kvp;
 
-                _logger.LogInformation("Summarizing {LineCount} lines for tag #{Tag}", lines.Count, tag);
+                LogSummarizingTag(_logger, lines.Count, tag);
 
-                var tagConfig = _config.Tags.Find(t => t.Name.Equals(tag, StringComparison.OrdinalIgnoreCase));
-                var prompt = tagConfig?.Prompt ?? _config.Prompts.WeeklyDefaultPrompt;
+                TagConfig? tagConfig = _config.Tags.Find(t => t.Name.Equals(tag, StringComparison.OrdinalIgnoreCase));
+                string prompt = tagConfig?.Prompt ?? _config.Prompts.WeeklyDefaultPrompt;
 
-                var content = string.Join('\n', lines);
-                var summary = await _openAIClient.SummarizePatternsAsync(prompt, content, ct).ConfigureAwait(false);
+                string content = string.Join('\n', lines);
+                string summary = await _openAIClient.SummarizePatternsAsync(prompt, content, ct).ConfigureAwait(false);
 
                 tagSummaryBag.Add((Tag: tag, Summary: summary));
             }).ConfigureAwait(false);
 
-        // Convert to FrozenDictionary for faster lookups
-        var tagSummaries = tagSummaryBag.ToFrozenDictionary(
+        // Convert to Dictionary for lookups
+        Dictionary<string, string> tagSummaries = tagSummaryBag.ToDictionary(
             x => x.Tag,
             x => x.Summary,
             StringComparer.OrdinalIgnoreCase);
 
         // Write to weekly focus
-        var outputPath = Path.Combine(_vault, _config.FocusPath, year.ToString(),
-            $"{_config.FocusPrefix}{isoWeek}_Summary.md");
+        string outputPath = Path.Combine(_vault, _config.FocusPath, year.ToString(CultureInfo.InvariantCulture),
+            $"{_config.FocusPrefix}{isoWeek.ToString(CultureInfo.InvariantCulture)}_Summary.md");
 
-        var estimatedOutputCapacity = 100 + tagSummaries.Count * 20;
-        var output = new List<string>(capacity: estimatedOutputCapacity)
+        int estimatedOutputCapacity = 100 + (tagSummaries.Count * 20);
+        List<string> output = new(capacity: estimatedOutputCapacity)
         {
             "## 🧠 Weekly Tag Summaries"
         };
 
         // OrderBy is optimized in .NET 9
-        foreach (var tag in tagSummaries.Keys.Order(StringComparer.OrdinalIgnoreCase))
+        foreach (string tag in tagSummaries.Keys.Order(StringComparer.OrdinalIgnoreCase))
         {
             output.Add($"\n### {tag} Summary\n{tagSummaries[tag]}");
         }
 
         token.ThrowIfCancellationRequested();
 
-        _logger.LogInformation("Generating weekly coaching reflection");
+        LogGeneratingCoachingReflection(_logger);
 
         // Use ArrayPool for large string building to reduce GC pressure
         string fullWeekRaw;
         if (allLinesList.Count > 1000)
         {
             // Calculate total length to avoid reallocations
-            var totalLength = allLinesList.Sum(l => l.Length + Environment.NewLine.Length);
-            var sb = new StringBuilder(capacity: totalLength);
+            int totalLength = allLinesList.Sum(l => l.Length + Environment.NewLine.Length);
+            StringBuilder sb = new(capacity: totalLength);
 
-            foreach (var line in allLinesList)
+            foreach (string line in allLinesList)
             {
-                sb.AppendLine(line);
+                _ = sb.AppendLine(line);
             }
             fullWeekRaw = sb.ToString();
         }
@@ -175,7 +180,7 @@ public sealed class WeeklyWorker : IWorker
         }
 
         // GPT Coaching Reflection
-        var coachingReflection = await _openAIClient.SummarizePatternsAsync(
+        string coachingReflection = await _openAIClient.SummarizePatternsAsync(
             _config.Prompts.WeeklyCoachPrompt,
             fullWeekRaw,
             token).ConfigureAwait(false);
@@ -185,14 +190,14 @@ public sealed class WeeklyWorker : IWorker
 
         // Check for unfinished tasks using optimized Span operations
         if (_config.Tags.Exists(x => x.Name.Equals("task", StringComparison.OrdinalIgnoreCase))
-            && grouped.TryGetValue("task", out var taskLines))
+            && grouped.TryGetValue("task", out List<string>? taskLines))
         {
             ReadOnlySpan<char> pendingTaskPrefix = "- [ ]";
-            var unfinishedTasks = new List<string>(taskLines.Count / 2); // Estimate half are unfinished
+            List<string> unfinishedTasks = new(taskLines.Count / 2); // Estimate half are unfinished
 
-            foreach (var task in taskLines)
+            foreach (string task in taskLines)
             {
-                var trimmed = task.AsSpan().TrimStart();
+                ReadOnlySpan<char> trimmed = task.AsSpan().TrimStart();
                 if (trimmed.StartsWith(pendingTaskPrefix, StringComparison.Ordinal))
                 {
                     unfinishedTasks.Add(task);
@@ -203,9 +208,9 @@ public sealed class WeeklyWorker : IWorker
             {
                 token.ThrowIfCancellationRequested();
 
-                _logger.LogInformation("Generating intentions for {TaskCount} unfinished tasks", unfinishedTasks.Count);
+                LogGeneratingIntentions(_logger, unfinishedTasks.Count);
 
-                var intentions = await _openAIClient.SummarizePatternsAsync(
+                string intentions = await _openAIClient.SummarizePatternsAsync(
                     _config.Prompts.WeeklyIntentionsPrompt,
                     string.Join('\n', unfinishedTasks),
                     token).ConfigureAwait(false);
@@ -221,15 +226,15 @@ public sealed class WeeklyWorker : IWorker
         // Use optimized file write
         await WriteAllLinesOptimizedAsync(outputPath, output, append: true, token).ConfigureAwait(false);
 
-        _logger.LogInformation("Weekly processing completed successfully. Output written to {OutputPath}", outputPath);
+        LogWeeklyProcessingCompleted(_logger, outputPath);
     }
 
     private static async ValueTask EnsureDirectoryExistsAsync(string filePath, CancellationToken token)
     {
-        var directory = Path.GetDirectoryName(filePath);
+        string? directory = Path.GetDirectoryName(filePath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {
-            await Task.Run(() => Directory.CreateDirectory(directory), token).ConfigureAwait(false);
+            _ = await Task.Run(() => Directory.CreateDirectory(directory), token).ConfigureAwait(false);
         }
     }
 
@@ -239,7 +244,7 @@ public sealed class WeeklyWorker : IWorker
         bool append,
         CancellationToken token)
     {
-        var options = new FileStreamOptions
+        FileStreamOptions options = new()
         {
             Mode = append ? FileMode.Append : FileMode.Create,
             Access = FileAccess.Write,
@@ -248,12 +253,87 @@ public sealed class WeeklyWorker : IWorker
             BufferSize = 4096
         };
 
-        await using var stream = new FileStream(path, options);
-        await using var writer = new StreamWriter(stream);
+        await using FileStream stream = new(path, options);
+        await using StreamWriter writer = new(stream);
 
-        foreach (var line in lines)
+        foreach (string line in lines)
         {
             await writer.WriteLineAsync(line.AsMemory(), token).ConfigureAwait(false);
         }
     }
+
+    #region LoggerMessage Delegates
+
+    private static readonly Action<ILogger, string, Exception?> _logWorkerInitialized =
+        LoggerMessage.Define<string>(
+            LogLevel.Debug,
+            new EventId(1, nameof(LogWorkerInitialized)),
+            "WeeklyWorker initialized with vault: {VaultPath}");
+
+    private static readonly Action<ILogger, Exception?> _logStartingWeeklyProcessing =
+        LoggerMessage.Define(
+            LogLevel.Information,
+            new EventId(2, nameof(LogStartingWeeklyProcessing)),
+            "Starting weekly processing");
+
+    private static readonly Action<ILogger, Exception?> _logNotMonday =
+        LoggerMessage.Define(
+            LogLevel.Information,
+            new EventId(3, nameof(LogNotMonday)),
+            "Not Monday, skipping weekly processing");
+
+    private static readonly Action<ILogger, string, Exception?> _logArchiveDirectoryNotFound =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            new EventId(4, nameof(LogArchiveDirectoryNotFound)),
+            "Archive directory not found: {ArchivePath}");
+
+    private static readonly Action<ILogger, int, int, Exception?> _logProcessingFiles =
+        LoggerMessage.Define<int, int>(
+            LogLevel.Information,
+            new EventId(5, nameof(LogProcessingFiles)),
+            "Processing {FileCount} files from week {Week}");
+
+    private static readonly Action<ILogger, string, Exception?> _logNoMarkdownFiles =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            new EventId(6, nameof(LogNoMarkdownFiles)),
+            "No markdown files found in {ArchivePath}");
+
+    private static readonly Action<ILogger, int, string, Exception?> _logSummarizingTag =
+        LoggerMessage.Define<int, string>(
+            LogLevel.Information,
+            new EventId(7, nameof(LogSummarizingTag)),
+            "Summarizing {LineCount} lines for tag #{Tag}");
+
+    private static readonly Action<ILogger, Exception?> _logGeneratingCoachingReflection =
+        LoggerMessage.Define(
+            LogLevel.Information,
+            new EventId(8, nameof(LogGeneratingCoachingReflection)),
+            "Generating weekly coaching reflection");
+
+    private static readonly Action<ILogger, int, Exception?> _logGeneratingIntentions =
+        LoggerMessage.Define<int>(
+            LogLevel.Information,
+            new EventId(9, nameof(LogGeneratingIntentions)),
+            "Generating intentions for {TaskCount} unfinished tasks");
+
+    private static readonly Action<ILogger, string, Exception?> _logWeeklyProcessingCompleted =
+        LoggerMessage.Define<string>(
+            LogLevel.Information,
+            new EventId(10, nameof(LogWeeklyProcessingCompleted)),
+            "Weekly processing completed successfully. Output written to {OutputPath}");
+
+    private static void LogWorkerInitialized(ILogger logger, string vault) => _logWorkerInitialized(logger, vault, null);
+    private static void LogStartingWeeklyProcessing(ILogger logger) => _logStartingWeeklyProcessing(logger, null);
+    private static void LogNotMonday(ILogger logger) => _logNotMonday(logger, null);
+    private static void LogArchiveDirectoryNotFound(ILogger logger, string path) => _logArchiveDirectoryNotFound(logger, path, null);
+    private static void LogProcessingFiles(ILogger logger, int count, int week) => _logProcessingFiles(logger, count, week, null);
+    private static void LogNoMarkdownFiles(ILogger logger, string path) => _logNoMarkdownFiles(logger, path, null);
+    private static void LogSummarizingTag(ILogger logger, int count, string tag) => _logSummarizingTag(logger, count, tag, null);
+    private static void LogGeneratingCoachingReflection(ILogger logger) => _logGeneratingCoachingReflection(logger, null);
+    private static void LogGeneratingIntentions(ILogger logger, int count) => _logGeneratingIntentions(logger, count, null);
+    private static void LogWeeklyProcessingCompleted(ILogger logger, string path) => _logWeeklyProcessingCompleted(logger, path, null);
+
+    #endregion
 }
