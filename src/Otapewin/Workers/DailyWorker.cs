@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Otapewin.Clients;
 using Otapewin.Helpers;
+using System.Collections.Concurrent;
 using System.Globalization;
 
 namespace Otapewin.Workers;
@@ -70,7 +71,11 @@ public sealed class DailyWorker : IWorker
         DateOnly today = DateOnly.FromDateTime(now);
         int isoWeek = ISOWeek.GetWeekOfYear(today.ToDateTime(TimeOnly.MinValue));
 
-        // Use FrozenDictionary for tag configuration (faster lookups in .NET 8+)
+        // Cache string conversions for reuse
+        string yearString = now.Year.ToString(CultureInfo.InvariantCulture);
+        string weekString = isoWeek.ToString(CultureInfo.InvariantCulture);
+
+        // Build tag dictionary with case-insensitive lookups
         Dictionary<string, List<string>> allAvailableTags = _config.Tags.ToDictionary(
             t => t.Name,
             _ => new List<string>(),
@@ -146,7 +151,7 @@ public sealed class DailyWorker : IWorker
             LogProcessingLookups(_logger, lookups.Count);
 
             // Use Parallel.ForEachAsync for better control (new in .NET 6+, optimized in .NET 9)
-            System.Collections.Concurrent.ConcurrentBag<(string Query, string Response)> lookupResultsBag = [];
+            ConcurrentBag<(string Query, string Response)> lookupResultsBag = [];
 
             await Parallel.ForEachAsync(
                 lookups,
@@ -192,8 +197,7 @@ public sealed class DailyWorker : IWorker
         }
 
         // Build output efficiently with pre-allocated capacity
-        string outputPath = Path.Combine(_vault, _config.FocusPath, now.Year.ToString(CultureInfo.InvariantCulture),
-            $"{_config.FocusPrefix}{isoWeek.ToString(CultureInfo.InvariantCulture)}.md");
+        string outputPath = Path.Combine(_vault, _config.FocusPath, yearString, $"{_config.FocusPrefix}{weekString}.md");
 
         await EnsureDirectoryExistsAsync(outputPath, token).ConfigureAwait(false);
 
@@ -204,7 +208,7 @@ public sealed class DailyWorker : IWorker
 
         if (!File.Exists(outputPath))
         {
-            output.Add($"# 📝 Weekly Focus - {isoWeek.ToString(CultureInfo.InvariantCulture)}");
+            output.Add($"# 📝 Weekly Focus - {weekString}");
         }
 
         output.Add(string.Empty);
@@ -262,8 +266,8 @@ public sealed class DailyWorker : IWorker
         LogWroteDailySummary(_logger, outputPath);
 
         // Archive processed content
-        string archivePath = Path.Combine(_vault, _config.ArchivePath, now.Year.ToString(CultureInfo.InvariantCulture),
-            $"Week_{isoWeek.ToString(CultureInfo.InvariantCulture)}", $"{_config.ArchivePrefix}{today:yyyy-MM-dd}.md");
+        string archivePath = Path.Combine(_vault, _config.ArchivePath, yearString,
+            $"Week_{weekString}", $"{_config.ArchivePrefix}{today:yyyy-MM-dd}.md");
 
         await EnsureDirectoryExistsAsync(archivePath, token).ConfigureAwait(false);
         await EnsureDirectoryExistsAsync(_inputPath, token).ConfigureAwait(false);

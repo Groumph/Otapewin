@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Otapewin.Clients;
 using Otapewin.Helpers;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 
@@ -77,7 +78,7 @@ public sealed class WeeklyWorker : IWorker
         List<string> allLinesList = new(capacity: estimatedLines);
 
         // Use Parallel.ForEachAsync for better concurrency control (.NET 6+, optimized in .NET 9)
-        System.Collections.Concurrent.ConcurrentBag<string[]> linesBag = [];
+        ConcurrentBag<string[]> linesBag = [];
 
         await Parallel.ForEachAsync(
             files,
@@ -107,7 +108,7 @@ public sealed class WeeklyWorker : IWorker
         _ = TagMatcher.ExtractTaggedSections(grouped, allLinesList);
 
         // Build GPT summary per tag group - parallelize with better control
-        System.Collections.Concurrent.ConcurrentBag<(string Tag, string Summary)> tagSummaryBag = [];
+        ConcurrentBag<(string Tag, string Summary)> tagSummaryBag = [];
 
         List<KeyValuePair<string, List<string>>> tagsToProcess = [.. grouped.Where(kvp => kvp.Value.Count > 0)];
 
