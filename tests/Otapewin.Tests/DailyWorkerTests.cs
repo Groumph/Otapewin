@@ -1,12 +1,12 @@
-using System.Globalization;
 using AutoFixture;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Otapewin;
+using Otapewin.Workers;
 using SecondBrain.Tests.Fixtures;
 using SecondBrain.Tests.Mocks;
-using Otapewin.Workers;
+using System.Globalization;
 using Xunit;
 
 namespace SecondBrain.Tests;

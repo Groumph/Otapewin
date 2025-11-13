@@ -6,8 +6,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Otapewin;
 using Otapewin.Clients;
-using SecondBrain.Tests.Mocks;
 using Otapewin.Workers;
+using SecondBrain.Tests.Mocks;
 using Xunit;
 
 namespace SecondBrain.Tests.Integration;

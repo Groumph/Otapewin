@@ -1,12 +1,15 @@
-using System.Buffers;
-using System.Collections.Concurrent;
-using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Otapewin.Clients;
+using System.Collections.Concurrent;
+using System.Globalization;
+using System.Text;
 
 namespace Otapewin.Workers;
 
+/// <summary>
+/// Backlog review worker for analyzing pending tasks
+/// </summary>
 public sealed class BacklogReviewWorker : IWorker
 {
     private readonly BrainConfig _config;
@@ -14,9 +17,9 @@ public sealed class BacklogReviewWorker : IWorker
     private readonly IOpenAIClient _openAIClient;
     private readonly ILogger<BacklogReviewWorker> _logger;
 
-    // Optimized search patterns using SearchValues (.NET 8+)
-    private static readonly SearchValues<char> TaskCompletedChars = SearchValues.Create("xX");
-
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BacklogReviewWorker"/> class
+    /// </summary>
     public BacklogReviewWorker(
         IOptions<BrainConfig> config,
         IOpenAIClient openAIClient,
@@ -33,41 +36,44 @@ public sealed class BacklogReviewWorker : IWorker
         _logger = logger;
         _vault = _config.VaultPath;
 
-        _logger.LogDebug("BacklogReviewWorker initialized with vault: {VaultPath}", _vault);
+        LogWorkerInitialized(_logger, _vault);
     }
 
+    /// <summary>
+    /// Process backlog review
+    /// </summary>
     public async Task ProcessAsync(CancellationToken token)
     {
-        _logger.LogInformation("Starting backlog review");
+        LogStartingBacklogReview(_logger);
 
         if (DateTime.UtcNow.DayOfWeek != DayOfWeek.Monday)
         {
-            _logger.LogInformation("Not Monday, skipping backlog review");
+            LogNotMonday(_logger);
             return;
         }
 
-        var today = DateTime.UtcNow;
-        var year = today.Year;
-        var currentWeek = ISOWeek.GetWeekOfYear(today);
-        var startWeek = currentWeek - 3;
+        DateTime today = DateTime.UtcNow;
+        int year = today.Year;
+        int currentWeek = ISOWeek.GetWeekOfYear(today);
+        int startWeek = currentWeek - 3;
 
-        _logger.LogInformation("Reviewing backlog from week {StartWeek} to {CurrentWeek}", startWeek, currentWeek);
+        LogReviewingBacklog(_logger, startWeek, currentWeek);
 
         // Check if output file exists first to avoid unnecessary work
-        var isoWeek = ISOWeek.GetWeekOfYear(today);
-        var outputPath = Path.Combine(_vault, _config.FocusPath, year.ToString(), $"{_config.FocusPrefix}{isoWeek}.md");
+        int isoWeek = ISOWeek.GetWeekOfYear(today);
+        string outputPath = Path.Combine(_vault, _config.FocusPath, year.ToString(CultureInfo.InvariantCulture), $"{_config.FocusPrefix}{isoWeek.ToString(CultureInfo.InvariantCulture)}.md");
 
         if (!File.Exists(outputPath))
         {
-            _logger.LogWarning("Weekly focus file not found: {OutputPath}", outputPath);
+            LogWeeklyFocusFileNotFound(_logger, outputPath);
             return;
         }
 
         // Use ConcurrentBag for thread-safe collection during parallel processing
-        var backlogTasksBag = new ConcurrentBag<string>();
+        ConcurrentBag<string> backlogTasksBag = [];
 
         // Pre-create week range to process
-        var weeksToProcess = Enumerable.Range(startWeek, currentWeek - startWeek + 1).ToList();
+        List<int> weeksToProcess = [.. Enumerable.Range(startWeek, currentWeek - startWeek + 1)];
 
         // Process weeks with optimized parallel control using Parallel.ForEachAsync (.NET 6+, optimized .NET 9)
         await Parallel.ForEachAsync(
@@ -79,16 +85,16 @@ public sealed class BacklogReviewWorker : IWorker
             },
             async (week, ct) =>
             {
-                var archiveDir = Path.Combine(_vault, _config.ArchivePath, year.ToString(), $"Week_{week}");
+                string archiveDir = Path.Combine(_vault, _config.ArchivePath, year.ToString(CultureInfo.InvariantCulture), $"Week_{week.ToString(CultureInfo.InvariantCulture)}");
 
                 if (!Directory.Exists(archiveDir))
                 {
-                    _logger.LogDebug("Archive directory not found for week {Week}: {Directory}", week, archiveDir);
+                    LogArchiveDirectoryNotFound(_logger, week, archiveDir);
                     return;
                 }
 
-                var files = Directory.GetFiles(archiveDir, "*.md", SearchOption.TopDirectoryOnly);
-                _logger.LogDebug("Processing {FileCount} files from week {Week}", files.Length, week);
+                string[] files = Directory.GetFiles(archiveDir, "*.md", SearchOption.TopDirectoryOnly);
+                LogProcessingFilesForWeek(_logger, files.Length, week);
 
                 if (files.Length == 0)
                 {
@@ -105,7 +111,7 @@ public sealed class BacklogReviewWorker : IWorker
                     },
                     async (file, fileCt) =>
                     {
-                        var lines = await File.ReadAllLinesAsync(file, fileCt).ConfigureAwait(false);
+                        string[] lines = await File.ReadAllLinesAsync(file, fileCt).ConfigureAwait(false);
 
                         // Optimized patterns for matching
                         ReadOnlySpan<char> taskTag = "#task";
@@ -113,13 +119,15 @@ public sealed class BacklogReviewWorker : IWorker
                         ReadOnlySpan<char> completedUpper = "- [X]";
 
                         // Use Span<T> for efficient string operations
-                        foreach (var line in lines)
+                        foreach (string line in lines)
                         {
                             if (string.IsNullOrWhiteSpace(line))
+                            {
                                 continue;
+                            }
 
-                            var lineSpan = line.AsSpan();
-                            var trimmedLine = lineSpan.TrimStart();
+                            ReadOnlySpan<char> lineSpan = line.AsSpan();
+                            ReadOnlySpan<char> trimmedLine = lineSpan.TrimStart();
 
                             // Check if line contains task tag and is not completed
                             if (trimmedLine.Contains(taskTag, StringComparison.OrdinalIgnoreCase) &&
@@ -132,52 +140,51 @@ public sealed class BacklogReviewWorker : IWorker
                     }).ConfigureAwait(false);
             }).ConfigureAwait(false);
 
-        // Deduplicate tasks using FrozenSet for optimal performance (.NET 8+)
-        var backlogTasks = backlogTasksBag
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        // Deduplicate tasks using HashSet for optimal performance
+        List<string> backlogTasks = [.. backlogTasksBag
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
 
         if (backlogTasks.Count == 0)
         {
-            _logger.LogInformation("No backlog tasks found");
+            LogNoBacklogTasksFound(_logger);
             return;
         }
 
-        _logger.LogInformation("Found {TaskCount} unique backlog tasks", backlogTasks.Count);
+        LogFoundBacklogTasks(_logger, backlogTasks.Count);
 
         token.ThrowIfCancellationRequested();
 
         // Use efficient string joining with pre-calculated capacity
-        var estimatedLength = backlogTasks.Sum(t => t.Length + 1);
-        var sb = new System.Text.StringBuilder(capacity: estimatedLength);
+        int estimatedLength = backlogTasks.Sum(t => t.Length + 1);
+        StringBuilder sb = new(capacity: estimatedLength);
 
         for (int i = 0; i < backlogTasks.Count; i++)
         {
-            sb.Append(backlogTasks[i]);
+            _ = sb.Append(backlogTasks[i]);
             if (i < backlogTasks.Count - 1)
             {
-                sb.Append('\n');
+                _ = sb.Append('\n');
             }
         }
 
-        var tasksContent = sb.ToString();
+        string tasksContent = sb.ToString();
 
-        var review = await _openAIClient.SummarizePatternsAsync(
+        string review = await _openAIClient.SummarizePatternsAsync(
             _config.Prompts.BacklogReviewPrompt,
             tasksContent,
             token).ConfigureAwait(false);
 
-        var output = new List<string>(capacity: 5)
+        List<string> output = new(capacity: 5)
         {
             $"---{Environment.NewLine}",
-            "## 🧹 Task Backlog Review",
+            "## ?? Task Backlog Review",
             review
         };
 
         // Use optimized file write
         await WriteAllLinesOptimizedAsync(outputPath, output, append: true, token).ConfigureAwait(false);
 
-        _logger.LogInformation("Backlog review completed successfully. Review written to {OutputPath}", outputPath);
+        LogBacklogReviewCompleted(_logger, outputPath);
     }
 
     private static async ValueTask WriteAllLinesOptimizedAsync(
@@ -186,7 +193,7 @@ public sealed class BacklogReviewWorker : IWorker
         bool append,
         CancellationToken token)
     {
-        var options = new FileStreamOptions
+        FileStreamOptions options = new()
         {
             Mode = append ? FileMode.Append : FileMode.Create,
             Access = FileAccess.Write,
@@ -195,12 +202,87 @@ public sealed class BacklogReviewWorker : IWorker
             BufferSize = 4096
         };
 
-        await using var stream = new FileStream(path, options);
-        await using var writer = new StreamWriter(stream);
+        await using FileStream stream = new(path, options);
+        await using StreamWriter writer = new(stream);
 
-        foreach (var line in lines)
+        foreach (string line in lines)
         {
             await writer.WriteLineAsync(line.AsMemory(), token).ConfigureAwait(false);
         }
     }
+
+    #region LoggerMessage Delegates
+
+    private static readonly Action<ILogger, string, Exception?> _logWorkerInitialized =
+        LoggerMessage.Define<string>(
+            LogLevel.Debug,
+            new EventId(1, nameof(LogWorkerInitialized)),
+            "BacklogReviewWorker initialized with vault: {VaultPath}");
+
+    private static readonly Action<ILogger, Exception?> _logStartingBacklogReview =
+        LoggerMessage.Define(
+            LogLevel.Information,
+            new EventId(2, nameof(LogStartingBacklogReview)),
+            "Starting backlog review");
+
+    private static readonly Action<ILogger, Exception?> _logNotMonday =
+        LoggerMessage.Define(
+            LogLevel.Information,
+            new EventId(3, nameof(LogNotMonday)),
+            "Not Monday, skipping backlog review");
+
+    private static readonly Action<ILogger, int, int, Exception?> _logReviewingBacklog =
+        LoggerMessage.Define<int, int>(
+            LogLevel.Information,
+            new EventId(4, nameof(LogReviewingBacklog)),
+            "Reviewing backlog from week {StartWeek} to {CurrentWeek}");
+
+    private static readonly Action<ILogger, string, Exception?> _logWeeklyFocusFileNotFound =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            new EventId(5, nameof(LogWeeklyFocusFileNotFound)),
+            "Weekly focus file not found: {OutputPath}");
+
+    private static readonly Action<ILogger, int, string, Exception?> _logArchiveDirectoryNotFound =
+        LoggerMessage.Define<int, string>(
+            LogLevel.Debug,
+            new EventId(6, nameof(LogArchiveDirectoryNotFound)),
+            "Archive directory not found for week {Week}: {Directory}");
+
+    private static readonly Action<ILogger, int, int, Exception?> _logProcessingFilesForWeek =
+        LoggerMessage.Define<int, int>(
+            LogLevel.Debug,
+            new EventId(7, nameof(LogProcessingFilesForWeek)),
+            "Processing {FileCount} files from week {Week}");
+
+    private static readonly Action<ILogger, Exception?> _logNoBacklogTasksFound =
+        LoggerMessage.Define(
+            LogLevel.Information,
+            new EventId(8, nameof(LogNoBacklogTasksFound)),
+            "No backlog tasks found");
+
+    private static readonly Action<ILogger, int, Exception?> _logFoundBacklogTasks =
+        LoggerMessage.Define<int>(
+            LogLevel.Information,
+            new EventId(9, nameof(LogFoundBacklogTasks)),
+            "Found {TaskCount} unique backlog tasks");
+
+    private static readonly Action<ILogger, string, Exception?> _logBacklogReviewCompleted =
+        LoggerMessage.Define<string>(
+            LogLevel.Information,
+            new EventId(10, nameof(LogBacklogReviewCompleted)),
+            "Backlog review completed successfully. Review written to {OutputPath}");
+
+    private static void LogWorkerInitialized(ILogger logger, string vault) => _logWorkerInitialized(logger, vault, null);
+    private static void LogStartingBacklogReview(ILogger logger) => _logStartingBacklogReview(logger, null);
+    private static void LogNotMonday(ILogger logger) => _logNotMonday(logger, null);
+    private static void LogReviewingBacklog(ILogger logger, int start, int current) => _logReviewingBacklog(logger, start, current, null);
+    private static void LogWeeklyFocusFileNotFound(ILogger logger, string path) => _logWeeklyFocusFileNotFound(logger, path, null);
+    private static void LogArchiveDirectoryNotFound(ILogger logger, int week, string dir) => _logArchiveDirectoryNotFound(logger, week, dir, null);
+    private static void LogProcessingFilesForWeek(ILogger logger, int count, int week) => _logProcessingFilesForWeek(logger, count, week, null);
+    private static void LogNoBacklogTasksFound(ILogger logger) => _logNoBacklogTasksFound(logger, null);
+    private static void LogFoundBacklogTasks(ILogger logger, int count) => _logFoundBacklogTasks(logger, count, null);
+    private static void LogBacklogReviewCompleted(ILogger logger, string path) => _logBacklogReviewCompleted(logger, path, null);
+
+    #endregion
 }

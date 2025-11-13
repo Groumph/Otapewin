@@ -1,5 +1,8 @@
 namespace Otapewin.Extensions;
 
+/// <summary>
+/// String extension methods for common operations
+/// </summary>
 public static class StringExtensions
 {
     private const string UserNamePlaceholder = "{userName}";

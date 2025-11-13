@@ -8,7 +8,7 @@ namespace Otapewin.Helpers;
 public static class ConsoleUi
 {
     private static readonly Lock ConsoleLock = new(); // .NET 9 Lock type
-    private static bool _colorsSupported = true;
+    private static readonly bool _colorsSupported = InitializeColorSupport();
 
     // Cache common strings to reduce allocations
     private static readonly string[] LogLevelPadded =
@@ -23,17 +23,17 @@ public static class ConsoleUi
         "FAILED "
     ];
 
-    static ConsoleUi()
+    private static bool InitializeColorSupport()
     {
         // Detect if console supports colors (fails in Windows Scheduler)
         try
         {
             _ = Console.ForegroundColor;
-            _colorsSupported = !Console.IsOutputRedirected;
+            return !Console.IsOutputRedirected;
         }
         catch
         {
-            _colorsSupported = false;
+            return false;
         }
     }
 
@@ -48,7 +48,8 @@ public static class ConsoleUi
         lock (ConsoleLock)
         {
             Console.WriteLine();
-            WriteWithColor(text, ConsoleColor.Cyan, bold: true);
+            WriteWithColor(text, ConsoleColor.Cyan, inline: true);
+            Console.WriteLine();
             WriteWithColor(CreateUnderline(text.Length, '═'), ConsoleColor.Cyan);
             Console.WriteLine();
         }
@@ -116,19 +117,19 @@ public static class ConsoleUi
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         ArgumentNullException.ThrowIfNull(action);
 
-        var startTime = DateTime.UtcNow;
+        DateTime startTime = DateTime.UtcNow;
         WriteLogMessage(LogLevelPadded[5], message, ConsoleColor.Cyan, "▶");
 
         try
         {
-            var result = action();
-            var duration = DateTime.UtcNow - startTime;
+            T result = action();
+            TimeSpan duration = DateTime.UtcNow - startTime;
             WriteLogMessage(LogLevelPadded[6], $"{message} (took {duration.TotalMilliseconds:F0}ms)", ConsoleColor.Green, "✓");
             return result;
         }
         catch (Exception ex)
         {
-            var duration = DateTime.UtcNow - startTime;
+            TimeSpan duration = DateTime.UtcNow - startTime;
             WriteLogMessage(LogLevelPadded[7], $"{message} (after {duration.TotalMilliseconds:F0}ms): {ex.Message}", ConsoleColor.Red, "✗", useStdErr: true);
             throw;
         }
@@ -146,19 +147,19 @@ public static class ConsoleUi
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         ArgumentNullException.ThrowIfNull(action);
 
-        var startTime = DateTime.UtcNow;
+        DateTime startTime = DateTime.UtcNow;
         WriteLogMessage(LogLevelPadded[5], message, ConsoleColor.Cyan, "▶");
 
         try
         {
-            var result = await action().ConfigureAwait(false);
-            var duration = DateTime.UtcNow - startTime;
+            T result = await action().ConfigureAwait(false);
+            TimeSpan duration = DateTime.UtcNow - startTime;
             WriteLogMessage(LogLevelPadded[6], $"{message} (took {duration.TotalMilliseconds:F0}ms)", ConsoleColor.Green, "✓");
             return result;
         }
         catch (Exception ex)
         {
-            var duration = DateTime.UtcNow - startTime;
+            TimeSpan duration = DateTime.UtcNow - startTime;
             WriteLogMessage(LogLevelPadded[7], $"{message} (after {duration.TotalMilliseconds:F0}ms): {ex.Message}", ConsoleColor.Red, "✗", useStdErr: true);
             throw;
         }
@@ -183,13 +184,13 @@ public static class ConsoleUi
             WriteWithColor("┌─ Tag Summary ─────────────────────", ConsoleColor.Cyan);
 
             // Use TryGetNonEnumeratedCount for better performance
-            var maxKeyLen = counts.Keys.Max(k => k?.Length ?? 0);
-            var totalCount = counts.Values.Sum();
+            int maxKeyLen = counts.Keys.Max(k => k?.Length ?? 0);
+            int totalCount = counts.Values.Sum();
 
-            foreach (var (key, value) in counts.OrderByDescending(x => x.Value))
+            foreach ((string key, int value) in counts.OrderByDescending(x => x.Value))
             {
-                var percentage = totalCount > 0 ? (value * 100.0 / totalCount) : 0;
-                var barLength = Math.Min((int)(percentage / 5), 20);
+                double percentage = totalCount > 0 ? value * 100.0 / totalCount : 0;
+                int barLength = Math.Min((int)(percentage / 5), 20);
 
                 Console.Write("│ ");
                 WriteWithColor(key.PadRight(maxKeyLen), ConsoleColor.White, inline: true);
@@ -215,15 +216,18 @@ public static class ConsoleUi
     /// <param name="message">Optional message.</param>
     public static void Progress(int current, int total, string? message = null)
     {
-        if (total <= 0) return;
+        if (total <= 0)
+        {
+            return;
+        }
 
         lock (ConsoleLock)
         {
-            var percentage = (int)((current * 100.0) / total);
+            int percentage = (int)(current * 100.0 / total);
             const int barLength = 40;
-            var filled = (int)((current * barLength) / total);
+            int filled = current * barLength / total;
 
-            var bar = CreateProgressBar(filled, barLength);
+            string bar = CreateProgressBar(filled, barLength);
 
             Console.Write($"\r│ Progress: [{bar}] {percentage,3}% ({current}/{total})");
 
@@ -246,7 +250,7 @@ public static class ConsoleUi
     {
         lock (ConsoleLock)
         {
-            var width = Console.WindowWidth > 0 ? Math.Min(Console.WindowWidth, 80) : 80;
+            int width = Console.WindowWidth > 0 ? Math.Min(Console.WindowWidth, 80) : 80;
             WriteWithColor(CreateUnderline(width, '─'), ConsoleColor.DarkGray);
         }
     }
@@ -262,8 +266,8 @@ public static class ConsoleUi
         {
             Console.WriteLine();
             WriteWithColor("╔═══════════════════════════════════════════════════════════════╗", ConsoleColor.Cyan);
-            WriteWithColor($"║  {appName.PadRight(59)}║", ConsoleColor.Cyan);
-            WriteWithColor($"║  Version {version.PadRight(51)}║", ConsoleColor.Gray);
+            WriteWithColor(string.Concat("║  ", appName.PadRight(59), "║"), ConsoleColor.Cyan);
+            WriteWithColor(string.Concat("║  Version ", version.PadRight(51), "║"), ConsoleColor.Gray);
             WriteWithColor("╚═══════════════════════════════════════════════════════════════╝", ConsoleColor.Cyan);
             Console.WriteLine();
         }
@@ -275,22 +279,22 @@ public static class ConsoleUi
     {
         lock (ConsoleLock)
         {
-            var timestamp = DateTime.UtcNow;
+            DateTime timestamp = DateTime.UtcNow;
             string timestampString;
 
             // Use TryFormat for better performance with stackalloc
             Span<char> timestampBuffer = stackalloc char[23];
-            if (timestamp.TryFormat(timestampBuffer, out var charsWritten, "yyyy-MM-dd HH:mm:ss.fff"))
+            if (timestamp.TryFormat(timestampBuffer, out int charsWritten, "yyyy-MM-dd HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture))
             {
                 timestampString = timestampBuffer[..charsWritten].ToString();
             }
             else
             {
                 // Fallback to standard formatting
-                timestampString = timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                timestampString = timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture);
             }
 
-            var output = useStdErr ? Console.Error : Console.Out;
+            TextWriter output = useStdErr ? Console.Error : Console.Out;
 
             if (_colorsSupported && !useStdErr)
             {
@@ -313,17 +317,17 @@ public static class ConsoleUi
             else
             {
                 // Plain output for Windows Scheduler / redirected output
-                var iconText = icon != null ? $"{icon} " : "";
+                string iconText = icon != null ? $"{icon} " : "";
                 output.WriteLine($"[{timestampString}] [{level}] {iconText}{message}");
             }
         }
     }
 
-    private static void WriteWithColor(string text, ConsoleColor color, bool bold = false, bool inline = false)
+    private static void WriteWithColor(string text, ConsoleColor color, bool inline = false)
     {
         if (_colorsSupported)
         {
-            var originalColor = Console.ForegroundColor;
+            ConsoleColor originalColor = Console.ForegroundColor;
             try
             {
                 Console.ForegroundColor = color;
@@ -383,7 +387,7 @@ public static class ConsoleUi
     private static string CreateBar(int length)
     {
         const int maxLength = 20;
-        var actualLength = Math.Min(length, maxLength);
+        int actualLength = Math.Min(length, maxLength);
 
         return string.Create(maxLength, actualLength, static (span, len) =>
         {

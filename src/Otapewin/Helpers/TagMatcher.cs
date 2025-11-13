@@ -1,12 +1,10 @@
-using System.Buffers;
-
 namespace Otapewin.Helpers;
 
+/// <summary>
+/// Tag matching utilities for extracting tagged content
+/// </summary>
 public static class TagMatcher
 {
-    // Cache for common patterns to reduce allocations
-    private static readonly SearchValues<char> WhitespaceChars = SearchValues.Create(" \t\r\n");
-
     /// <summary>
     /// Builds all recognized hashtags for a tag.
     /// </summary>
@@ -34,25 +32,25 @@ public static class TagMatcher
         ArgumentNullException.ThrowIfNull(allAvailableTags);
         ArgumentNullException.ThrowIfNull(lines);
 
-        foreach (var line in lines)
+        foreach (string line in lines)
         {
             if (string.IsNullOrWhiteSpace(line))
             {
                 continue;
             }
 
-            var lineSpan = line.AsSpan();
+            ReadOnlySpan<char> lineSpan = line.AsSpan();
 
             // Check each tag using optimized Span-based search
-            foreach (var tag in allAvailableTags.Keys)
+            foreach (string tag in allAvailableTags.Keys)
             {
-                var fullTag = $"#{tag}";
+                string fullTag = $"#{tag}";
 
                 // Use Span-based search for better performance
                 if (lineSpan.Contains(fullTag, StringComparison.OrdinalIgnoreCase))
                 {
                     // Only trim if necessary - use Span to check
-                    var trimmed = lineSpan.Trim();
+                    ReadOnlySpan<char> trimmed = lineSpan.Trim();
                     allAvailableTags[tag].Add(trimmed.Length == lineSpan.Length ? line : trimmed.ToString());
                     break;
                 }

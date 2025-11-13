@@ -1,12 +1,12 @@
-using System.Globalization;
 using AutoFixture;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Otapewin;
+using Otapewin.Workers;
 using SecondBrain.Tests.Fixtures;
 using SecondBrain.Tests.Mocks;
-using Otapewin.Workers;
+using System.Globalization;
 using Xunit;
 
 namespace SecondBrain.Tests;
@@ -16,7 +16,8 @@ public sealed class BacklogReviewWorkerTests : TestFixtureBase
     [Fact]
     public async Task ProcessAsync_ReturnsEarly_WhenNotMonday()
     {
-        if (DateTime.UtcNow.DayOfWeek == DayOfWeek.Monday) return;
+        if (DateTime.UtcNow.DayOfWeek == DayOfWeek.Monday)
+            return;
 
         var config = Fixture.Create<BrainConfig>();
         var vaultPath = Path.Combine(TempDir, "vault");
@@ -34,7 +35,8 @@ public sealed class BacklogReviewWorkerTests : TestFixtureBase
     [Fact]
     public async Task ProcessAsync_ReturnsEarly_WhenFocusFileDoesNotExist()
     {
-        if (DateTime.UtcNow.DayOfWeek != DayOfWeek.Monday) return;
+        if (DateTime.UtcNow.DayOfWeek != DayOfWeek.Monday)
+            return;
 
         var config = Fixture.Create<BrainConfig>();
         var vaultPath = Path.Combine(TempDir, "vault");
@@ -55,7 +57,8 @@ public sealed class BacklogReviewWorkerTests : TestFixtureBase
     [Fact]
     public async Task ProcessAsync_ProcessesBacklogTasks_Successfully()
     {
-        if (DateTime.UtcNow.DayOfWeek != DayOfWeek.Monday) return;
+        if (DateTime.UtcNow.DayOfWeek != DayOfWeek.Monday)
+            return;
 
         var config = Fixture.Create<BrainConfig>();
         var vaultPath = Path.Combine(TempDir, "vault");

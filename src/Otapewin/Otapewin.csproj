@@ -24,10 +24,10 @@
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
     <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
-    
-    <!-- Suppress expected trimming warnings for DataAnnotations validation -->
-    <!-- IL2026: ValidateDataAnnotations uses reflection which is incompatible with trimming, but safe for our use case -->
-    <NoWarn>$(NoWarn);IL2026</NoWarn>
+
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
