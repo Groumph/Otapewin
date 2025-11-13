@@ -1,0 +1,197 @@
+# Use this file as the root config for the repo
+root = true
+
+##########################################################
+# Global defaults
+##########################################################
+
+[*.cs]
+
+# Treat analyzer issues as warnings by default
+dotnet_analyzer_diagnostic.severity = warning
+
+# Enable nullable reference types (still need <Nullable>enable</Nullable> in csproj)
+dotnet_style_null_checking = true:suggestion
+
+##########################################################
+# var vs explicit types
+##########################################################
+
+# Use 'var' when the type is obvious from the right-hand side
+csharp_style_var_when_type_is_apparent = true:suggestion
+
+# Use 'var' for built-in types (int, string, etc.)
+csharp_style_var_for_built_in_types = true:suggestion
+
+# Use explicit type when it isn't obvious
+csharp_style_var_elsewhere = false:warning
+
+##########################################################
+# Qualification (don't spam 'this.')
+##########################################################
+
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+dotnet_style_qualification_for_event = false:suggestion
+
+##########################################################
+# Modern C# features (keep code clean but not obnoxious)
+##########################################################
+
+# Prefer file-scoped namespaces
+csharp_style_namespace_declarations = file_scoped:warning
+
+# Prefer expression-bodied members when simple
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = when_on_single_line:suggestion
+csharp_style_expression_bodied_indexers = when_on_single_line:suggestion
+csharp_style_expression_bodied_accessors = when_on_single_line:suggestion
+
+# Pattern matching / modern switches
+csharp_style_pattern_matching_over_is_with_cast_check = true:warning
+csharp_style_pattern_matching_over_as_with_null_check = true:warning
+csharp_style_prefer_switch_expression = true:suggestion
+csharp_style_prefer_pattern_matching = true:suggestion
+
+# Null-coalescing and null propagation
+csharp_style_throw_expression = true:suggestion
+csharp_style_conditional_delegate_call = true:warning
+csharp_style_prefer_null_coalescing_expression = true:warning
+csharp_style_prefer_null_coalescing_assignment = true:warning
+
+# Using declarations (C# 8)
+csharp_prefer_simple_using_statement = true:suggestion
+
+##########################################################
+# Code quality / safety
+##########################################################
+
+# Prefer readonly fields when possible
+dotnet_style_readonly_field = true:warning
+
+# Inlined variable declarations in out parameters
+csharp_style_inlined_variable_declaration = true:suggestion
+
+# Prefer using 'nameof(...)'
+dotnet_style_prefer_nameof_expression = true:warning
+
+# Prefer collection/object initializers
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_object_initializer = true:suggestion
+
+# Prefer simplified boolean expressions, null checks, etc.
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true:warning
+dotnet_style_prefer_conditional_expression_over_assignment = false:suggestion
+dotnet_style_prefer_conditional_expression_over_return = false:suggestion
+
+##########################################################
+# Async / Task conventions (where analyzers care)
+##########################################################
+
+# Prefer 'async Task' over 'async void'
+dotnet_diagnostic.VSTHRD100.severity = warning
+
+# Prefer Task-returning methods for async patterns
+dotnet_diagnostic.IDE2007.severity = warning
+
+##########################################################
+# Naming rules
+##########################################################
+
+# Interfaces: I + PascalCase
+dotnet_naming_rule.interfaces_must_be_prefixed_with_i.symbols = interfaces
+dotnet_naming_rule.interfaces_must_be_prefixed_with_i.style = interface_prefix_style
+dotnet_naming_rule.interfaces_must_be_prefixed_with_i.severity = warning
+
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_symbols.interfaces.applicable_accessibilities = *
+dotnet_naming_symbols.interfaces.required_modifiers = *
+
+dotnet_naming_style.interface_prefix_style.capitalization = pascal_case
+dotnet_naming_style.interface_prefix_style.required_prefix = I
+
+# Private fields: _camelCase
+dotnet_naming_rule.private_fields_must_be_camel_with_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_must_be_camel_with_underscore.style = private_field_style
+dotnet_naming_rule.private_fields_must_be_camel_with_underscore.severity = warning
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_fields.required_modifiers = *
+
+dotnet_naming_style.private_field_style.capitalization = camel_case
+dotnet_naming_style.private_field_style.required_prefix = _
+
+# Constants: PascalCase
+dotnet_naming_rule.constants_must_be_pascal.symbols = constants
+dotnet_naming_rule.constants_must_be_pascal.style = constant_style
+dotnet_naming_rule.constants_must_be_pascal.severity = warning
+
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.applicable_accessibilities = *
+dotnet_naming_symbols.constants.required_modifiers = const
+
+dotnet_naming_style.constant_style.capitalization = pascal_case
+
+##########################################################
+# Formatting (minimal but strict)
+##########################################################
+
+# Indent / tabs
+indent_style = space
+indent_size = 4
+tab_width = 4
+
+# Newline preferences
+end_of_line = crlf
+insert_final_newline = true
+
+# Require braces for control blocks
+csharp_prefer_braces = true:warning
+
+# Spaces and readability
+csharp_space_after_cast = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_before_colon_in_inheritance_clause = true
+csharp_space_after_colon_in_inheritance_clause = true
+csharp_space_around_binary_operators = before_and_after
+
+# Wrapping and newlines (keep it simple)
+csharp_preserve_single_line_blocks = true
+csharp_preserve_single_line_statements = false
+
+##########################################################
+# Analyzer categories – turn the volume up
+##########################################################
+
+# Make all Style / Usage / Design rules warnings
+dotnet_analyzer_diagnostic.category-Style.severity = warning
+dotnet_analyzer_diagnostic.category-Usage.severity = warning
+dotnet_analyzer_diagnostic.category-Design.severity = warning
+dotnet_analyzer_diagnostic.category-Security.severity = warning
+dotnet_analyzer_diagnostic.category-Reliability.severity = warning
+dotnet_analyzer_diagnostic.category-Performance.severity = warning
+
+# Some especially useful Roslyn IDs (override if needed)
+
+# Unused private members
+dotnet_diagnostic.IDE0051.severity = warning
+
+# Unused parameters
+dotnet_diagnostic.IDE0060.severity = warning
+
+# Simplify boolean expressions
+dotnet_diagnostic.IDE0075.severity = suggestion
+
+# Use 'var' when type is apparent
+dotnet_diagnostic.IDE0007.severity = suggestion
+
+# Prefer pattern matching
+dotnet_diagnostic.IDE0019.severity = suggestion
+
+# Suggest 'readonly' where possible
+dotnet_diagnostic.IDE0044.severity = warning
+
+# Prefer 'using' directives outside namespace
+dotnet_diagnostic.IDE0065.severity = suggestion
